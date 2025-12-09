@@ -1,1 +1,360 @@
-<html><body>Frontend placeholder</body></html>
+<!doctype html>
+<html lang="ru" class="antialiased">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>METAR-KZ — METAR / TAF / AI Forecast</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    :root {
+      --card-bg: #ffffff;
+      --muted: #6b7280;
+    }
+    html.dark {
+      --card-bg: #0f1724;
+      --muted: #94a3b8;
+    }
+    .icon { width:28px; height:28px; opacity:.95 }
+    .arrow { width:40px; height:40px; transition: transform .25s ease; display:inline-block; }
+    .badge { display:inline-flex; align-items:center; gap:.5rem; padding:.28rem .6rem; border-radius:.5rem; font-weight:600; }
+    pre { white-space: pre-wrap; word-break: break-word }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+
+  <header class="bg-white/80 dark:bg-slate-800/80 backdrop-blur p-4 shadow-sm">
+    <div class="max-w-3xl mx-auto flex items-center justify-between gap-4">
+      <h1 class="text-lg font-semibold">METAR-KZ — METAR / TAF / AI Forecast</h1>
+      <div class="flex items-center gap-2">
+        <button id="themeToggle" class="px-3 py-1 rounded bg-slate-100 dark:bg-slate-700">Тема</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto p-4 space-y-6">
+    <!-- Controls -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <select id="airportSelect" class="col-span-1 sm:col-span-2 p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+        <!-- Common Kazakh airports; add/remove as needed -->
+        <option value="UAAA">UAAA — Алматы (Almaty Intl)</option>
+        <option value="UACC">UACC — Нур-Султан (Nursultan/NQZ)</option>
+        <option value="UADD">UADD — Тараз</option>
+        <option value="UAKK">UAKK — Караганда</option>
+        <option value="UAOO">UAOO — Aktau</option>
+        <option value="UAAA_alt">UAAA_alt</option>
+      </select>
+
+      <button id="refreshBtn" class="p-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">Обновить данные</button>
+    </section>
+
+    <!-- Status badge -->
+    <section id="statusCard" class="p-4 rounded-xl shadow" style="background:var(--card-bg);">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-sm text-slate-500 dark:text-slate-400">Aviation Status</div>
+          <div id="statusBadge" class="mt-2 badge text-sm bg-gray-200 dark:bg-slate-700 text-slate-700 dark:text-slate-100">—</div>
+        </div>
+        <div class="text-sm text-right text-slate-600 dark:text-slate-300">
+          <div id="ceilingText">Потолок: —</div>
+          <div id="visText">Видимость: —</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- METAR card -->
+    <section id="metarCard" class="p-4 rounded-xl shadow" style="background:var(--card-bg);"></section>
+
+    <!-- TAF card -->
+    <section id="tafCard" class="p-4 rounded-xl shadow" style="background:var(--card-bg);"></section>
+
+    <!-- AI forecast card -->
+    <section id="aiForecastCard" class="p-4 rounded-xl shadow" style="background:var(--card-bg);"></section>
+
+    <!-- Footer / credits -->
+    <footer class="text-xs text-slate-500 dark:text-slate-400">
+      Источники: aviationweather.gov API • AI: Gemini (через backend) • Обновление: каждые 60 минут
+    </footer>
+  </main>
+
+  <script>
+  // -------------------------
+  // Configuration
+  // -------------------------
+  const API_BASE = "/api"; // monorepo backend endpoints
+
+  // -------------------------
+  // Theme
+  // -------------------------
+  const themeToggle = document.getElementById("themeToggle");
+  function applyTheme() {
+    if (localStorage.getItem("theme") === "dark") {
+      document.documentElement.classList.add("dark");
+      document.documentElement.setAttribute("data-theme","dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.setAttribute("data-theme","light");
+    }
+  }
+  applyTheme();
+  themeToggle.addEventListener("click", () => {
+    const cur = localStorage.getItem("theme") === "dark" ? "light" : "dark";
+    localStorage.setItem("theme", cur);
+    applyTheme();
+  });
+
+  // -------------------------
+  // Helpers
+  // -------------------------
+  function toNum(v){ return v===undefined||v===null||v===""||Number.isNaN(Number(v)) ? null : Number(v); }
+  function degToCardinal(deg){
+    if(deg==null) return "—";
+    const d = Number(deg) % 360;
+    const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+    const idx = Math.floor(((d + 11.25) % 360) / 22.5);
+    return `${Math.round(d)}° (${dirs[idx]})`;
+  }
+
+  // wind parsing — handle m/s or km/h heuristically
+  function parseWind(metarObj){
+    const rawDir = toNum(metarObj.wdir);
+    let rawSp = toNum(metarObj.wspd);
+    let rawGust = toNum(metarObj.wgust ?? metarObj.gust ?? null);
+
+    if (rawSp == null) {
+      return {dirText: degToCardinal(rawDir), speed_ms: null, speed_kt: null, gust_ms: null, gust_kt: null};
+    }
+
+    // heuristic: values > 40 likely km/h -> convert to m/s
+    let speed_ms = rawSp > 40 ? rawSp / 3.6 : rawSp;
+    let speed_kt = speed_ms * 1.943844;
+
+    let gust_ms = null, gust_kt = null;
+    if (rawGust != null) {
+      gust_ms = rawGust > 40 ? rawGust/3.6 : rawGust;
+      gust_kt = gust_ms * 1.943844;
+    }
+
+    return {
+      dirText: degToCardinal(rawDir),
+      speed_ms, speed_kt,
+      gust_ms, gust_kt,
+      rawDir: rawDir
+    };
+  }
+
+  function badgeFor(cat){
+    if(!cat) return {label:"—", cls:"bg-gray-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100"};
+    if(cat==="VFR") return {label:"VFR — Visual", cls:"bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"};
+    if(cat==="MVFR") return {label:"MVFR — Marginal VFR", cls:"bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200"};
+    if(cat==="IFR") return {label:"IFR — Instrument", cls:"bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200"};
+    if(cat==="LIFR") return {label:"LIFR — Low IFR", cls:"bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200"};
+    return {label:cat, cls:"bg-gray-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100"};
+  }
+
+  // safe fetch wrapper
+  async function safeFetch(url){
+    const res = await fetch(url, {cache: "no-store"});
+    if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.json();
+  }
+
+  // -------------------------
+  // UI Elements
+  // -------------------------
+  const airportSelect = document.getElementById("airportSelect");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const metarCard = document.getElementById("metarCard");
+  const tafCard = document.getElementById("tafCard");
+  const aiCard = document.getElementById("aiForecastCard");
+  const statusBadgeEl = document.getElementById("statusBadge");
+  const ceilingTextEl = document.getElementById("ceilingText");
+  const visTextEl = document.getElementById("visText");
+
+  // -------------------------
+  // Renderers
+  // -------------------------
+  async function renderMetar(icao){
+    metarCard.innerHTML = `<div>Загрузка METAR...</div>`;
+    try{
+      const data = await safeFetch(`${API_BASE}/metar?ids=${encodeURIComponent(icao)}`);
+      const m = Array.isArray(data) ? data[0] : (data && data.data ? data.data[0] : null);
+      if(!m) throw new Error("Нет METAR");
+
+      // clouds, ceiling
+      const clouds = Array.isArray(m.clouds) ? m.clouds : (m.clouds ? [m.clouds] : []);
+      const ceiling_ft = (clouds.length && (clouds[0].base || clouds[0].base === 0)) ? toNum(clouds[0].base) : null;
+
+      // visibility (API may provide km or meters) — handle both:
+      let vis_km = null;
+      if(m.visib != null){
+        const v = toNum(m.visib);
+        vis_km = v > 50 ? v / 1000 : v; // >50 -> meters -> km
+      }
+      const vis_sm = vis_km ? (vis_km / 1.609344) : null;
+
+      // pressure
+      const pressure = m.altim ?? null;
+
+      // flight category (prefer fltCat if provided)
+      const fltCat = m.fltCat ?? null;
+      const badge = badgeFor(fltCat);
+      statusBadgeEl.textContent = badge.label;
+      statusBadgeEl.className = "mt-2 badge text-sm " + badge.cls;
+
+      ceilingTextEl.textContent = ceiling_ft ? `Потолок: ${ceiling_ft} ft` : "Потолок: —";
+      visTextEl.textContent = vis_km ? `Видимость: ${vis_km.toFixed(1)} km (${vis_sm.toFixed(1)} SM)` : "Видимость: —";
+
+      // wind
+      const wind = parseWind(m);
+
+      // clouds text
+      const cloudsText = clouds.length ? clouds.map(c => `${c.cover ?? c.type ?? ""}${c.base ? " " + c.base + " ft" : ""}`).join(", ") : "нет";
+
+      // arrow rotation (wind direction value may be null)
+      const arrowAngle = (wind.rawDir != null) ? wind.rawDir : 0;
+
+      // HTML
+      metarCard.innerHTML = `
+        <h2 class="text-2xl font-semibold text-sky-600">METAR</h2>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          <div class="p-3 rounded border border-slate-100 dark:border-slate-700">
+            <div class="text-sm text-slate-500 dark:text-slate-400">Температура</div>
+            <div class="text-lg font-semibold">${m.temp ?? "—"} °C</div>
+          </div>
+
+          <div class="p-3 rounded border border-slate-100 dark:border-slate-700">
+            <div class="text-sm text-slate-500 dark:text-slate-400">Давление (QNH)</div>
+            <div class="text-lg font-semibold">${pressure ?? "—"} гПа</div>
+          </div>
+
+          <div class="p-3 rounded border border-slate-100 dark:border-slate-700">
+            <div class="text-sm text-slate-500 dark:text-slate-400">Ветер</div>
+            <div class="flex items-center gap-3 mt-2">
+              <svg class="arrow" viewBox="0 0 24 24" style="transform: rotate(${arrowAngle}deg);"><path d="M12 3 L19 12 H14 V21 H10 V12 H5z" fill="currentColor"/></svg>
+              <div>
+                <div class="font-semibold">${wind.dirText}</div>
+                <div class="text-sm text-slate-500 dark:text-slate-400">
+                  ${wind.speed_ms ? `${Math.round(wind.speed_ms)} м/с (${wind.speed_kt.toFixed(1)} kt)` : "—"}
+                  ${wind.gust_ms ? `<br>Порывы: ${Math.round(wind.gust_ms)} м/с (${wind.gust_kt.toFixed(1)} kt)` : ""}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 rounded border border-slate-100 dark:border-slate-700">
+            <div class="text-sm text-slate-500 dark:text-slate-400">Видимость</div>
+            <div class="text-lg font-semibold">${vis_km ? vis_km.toFixed(1) + " km" : "—"}</div>
+          </div>
+
+        </div>
+
+        <div class="mt-3 text-sm text-slate-500 dark:text-slate-400">Облака: ${cloudsText}</div>
+
+        <details class="mt-3">
+          <summary class="cursor-pointer text-sky-500">Исходный METAR</summary>
+          <pre class="mt-2 p-2 rounded bg-slate-100 dark:bg-slate-800 text-sm">${m.rawOb ?? "—"}</pre>
+        </details>
+      `;
+    }catch(err){
+      console.error(err);
+      metarCard.innerHTML = `<div class="text-red-500">Ошибка загрузки METAR: ${err.message}</div>`;
+    }
+  }
+
+  async function renderTaf(icao){
+    tafCard.innerHTML = `<div>Загрузка TAF...</div>`;
+    try{
+      const data = await safeFetch(`${API_BASE}/taf?ids=${encodeURIComponent(icao)}`);
+      const t = Array.isArray(data) ? data[0] : (data && data.data ? data.data[0] : null);
+      if(!t) throw new Error("Нет TAF");
+
+      tafCard.innerHTML = `
+        <h2 class="text-2xl font-semibold text-sky-600">TAF</h2>
+        <div class="mt-2 text-sm text-slate-600 dark:text-slate-300">
+          <div><b>Выпуск:</b> ${t.issueTime ?? "—"}</div>
+          <div><b>Период:</b> ${t.validTimeFrom ?? "—"} → ${t.validTimeTo ?? "—"}</div>
+        </div>
+
+        <details class="mt-3">
+          <summary class="cursor-pointer text-sky-500">Исходный TAF</summary>
+          <pre class="mt-2 p-2 rounded bg-slate-100 dark:bg-slate-800 text-sm">${t.rawTAF ?? "—"}</pre>
+        </details>
+      `;
+    }catch(err){
+      console.error(err);
+      tafCard.innerHTML = `<div class="text-red-500">Ошибка загрузки TAF: ${err.message}</div>`;
+    }
+  }
+
+  async function renderAIForecast(icao){
+    aiCard.innerHTML = `<div>Генерация прогноза ИИ...</div>`;
+    try{
+      const res = await fetch(`${API_BASE}/forecast?icao=${encodeURIComponent(icao)}`);
+      const d = await res.json();
+      if(d.error){
+        aiCard.innerHTML = `<div class="text-red-500">Ошибка прогноза ИИ: ${d.error}</div>`;
+        return;
+      }
+      const txt = d.forecast ?? d.result ?? JSON.stringify(d);
+      aiCard.innerHTML = `
+        <h2 class="text-2xl font-semibold text-violet-600">AI Forecast</h2>
+        <div class="mt-2 text-sm text-slate-700 dark:text-slate-300">${txt}</div>
+      `;
+    }catch(err){
+      console.error(err);
+      aiCard.innerHTML = `<div class="text-red-500">Ошибка генерации прогноза ИИ</div>`;
+    }
+  }
+
+  // -------------------------
+  // Refresh workflow
+  // -------------------------
+  async function refreshAll(){
+    const icao = airportSelect.value;
+    metarCard.innerHTML = `<div>Загрузка METAR...</div>`;
+    tafCard.innerHTML = `<div>Загрузка TAF...</div>`;
+    aiCard.innerHTML = `<div>Генерация прогноза ИИ...</div>`;
+    try{
+      await Promise.all([
+        renderMetar(icao),
+        renderTaf(icao),
+        renderAIForecastSafe(icao) // ensure AI forecast doesn't block main UI
+      ]);
+    }catch(err){
+      console.error("refreshAll error", err);
+    }
+  }
+
+  // helper wrapper: call AI forecast but never throw to main flow
+  async function renderAIForecastSafe(icao){
+    try{
+      await renderAIForecast(icao);
+    }catch(e){
+      console.error("AI forecast failed", e);
+      aiCard.innerHTML = `<div class="text-red-500">Ошибка прогнозa ИИ</div>`;
+    }
+  }
+
+  refreshBtn.addEventListener("click", refreshAll);
+
+  // auto-update every 60 minutes
+  setInterval(refreshAll, 60 * 60 * 1000);
+
+  // initial load
+  window.addEventListener("load", () => {
+    // If stored airport in localStorage, set it
+    const last = localStorage.getItem("metar_airport");
+    if(last) airportSelect.value = last;
+    airportSelect.addEventListener("change", () => {
+      localStorage.setItem("metar_airport", airportSelect.value);
+    });
+    refreshAll();
+  });
+
+  </script>
+</body>
+</html>
