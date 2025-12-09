@@ -1,84 +1,82 @@
 <!doctype html>
-<html lang="ru" class="antialiased">
+<html lang="ru" class="dark:bg-slate-900 dark:text-slate-100 antialiased">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>METAR-KZ — METAR / TAF / AI Forecast</title>
 
-  <!-- Tailwind -->
+  <!-- TailwindCSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
     .card {
-      background: #1e293b; /* slate-800 */
-      border: 1px solid #334155; /* slate-700 */
+      background: #0f172a;
+      border: 1px solid #1e293b;
       border-radius: 0.75rem;
       padding: 1.25rem;
-      box-shadow: 0 5px 12px rgba(0,0,0,0.25);
+      box-shadow: 0px 6px 14px rgba(0,0,0,0.25);
     }
-    .card-light {
+    html.light .card {
       background: #ffffff;
       border: 1px solid #e2e8f0;
     }
-    html.dark .card {
-      background: #0f172a;
-      border-color: #1e293b;
-    }
-    html.dark .card-light {
+
+    .card-light {
       background: #1e293b;
-      border-color: #334155;
+      border: 1px solid #334155;
+      border-radius: 0.5rem;
+      padding: 1rem;
+    }
+    html.light .card-light {
+      background: #f8fafc;
+      border-color: #cbd5e1;
     }
 
     .value {
       font-size: 1.4rem;
       font-weight: 700;
-      color: #f8fafc;
+      color: #f1f5f9;
     }
-    html.light .value {
-      color: #0f172a;
-    }
+    html.light .value { color: #0f172a; }
 
     .label {
       font-size: 0.8rem;
-      color: #cbd5e1;
+      color: #94a3b8;
     }
-    html.light .label {
-      color: #475569;
-    }
+    html.light .label { color: #475569; }
 
     .arrow {
-      width: 42px;
-      height: 42px;
+      width: 40px;
+      height: 40px;
       transition: transform .25s ease;
       color: #38bdf8;
     }
 
     .badge {
-      padding: 0.35rem 0.65rem;
+      padding: 0.35rem 0.7rem;
       border-radius: 0.5rem;
       font-weight: 700;
       font-size: 0.9rem;
+      color: #fff;
     }
-
-    .badge-vfr { background:#22c55e; color:#fff; }
-    .badge-mvfr { background:#0ea5e9; color:#fff; }
-    .badge-ifr { background:#ef4444; color:#fff; }
-    .badge-lifr { background:#8b5cf6; color:#fff; }
-    .badge-default { background:#64748b; color:#fff; }
+    .badge-vfr { background:#22c55e; }
+    .badge-mvfr { background:#0ea5e9; }
+    .badge-ifr { background:#ef4444; }
+    .badge-lifr { background:#8b5cf6; }
+    .badge-default { background:#64748b; }
 
     .error-box {
-      background:#fee2e2;
-      color:#b91c1c;
-      border:1px solid #fecaca;
+      background:#7f1d1d;
+      border:1px solid #991b1b;
       padding:0.75rem;
       border-radius:0.5rem;
-      margin-top:0.5rem;
+      color:#fecaca;
       font-weight:600;
     }
-    html.dark .error-box {
-      background:#7f1d1d;
-      border-color:#991b1b;
-      color:#fecaca;
+    html.light .error-box {
+      background:#fee2e2;
+      border-color:#fecaca;
+      color:#b91c1c;
     }
   </style>
 </head>
@@ -86,7 +84,7 @@
 <body class="min-h-screen bg-slate-900 text-slate-100">
 
 <header class="p-4 bg-slate-800 shadow flex justify-between items-center">
-  <div class="text-xl font-bold">METAR-KZ — METAR / TAF / AI Forecast</div>
+  <h1 class="text-xl font-bold">METAR-KZ — METAR / TAF / AI Forecast</h1>
   <button id="themeToggle" class="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600">Тема</button>
 </header>
 
@@ -103,7 +101,7 @@
     </select>
 
     <button id="refreshBtn" class="px-5 py-3 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold">
-      Обновить данные
+      Обновить
     </button>
   </div>
 
@@ -114,7 +112,7 @@
         <div class="label">Aviation Status</div>
         <div id="statusBadge" class="badge badge-default mt-2">—</div>
       </div>
-      <div class="text-right text-sm text-slate-300">
+      <div class="text-sm text-slate-300">
         <div id="ceilingText">Потолок: —</div>
         <div id="visText">Видимость: —</div>
       </div>
@@ -129,115 +127,134 @@
 
   <!-- AI Forecast -->
   <div id="aiForecastCard" class="card"></div>
-
-  <footer class="text-xs text-slate-500 text-center mt-6">
-    Источник: aviationweather.gov • AI прогноз: Gemini • Автообновление: каждые 60 минут
-  </footer>
 </main>
 
+<footer class="text-xs text-slate-500 text-center mt-6 pb-6">
+  Источник: aviationweather.gov • Прогноз ИИ: Gemini Flash • Автообновление: 60 минут
+</footer>
+
+
 <script>
-/* ----- THEME SWITCH ----- */
+/* ===== THEME SWITCH ===== */
 const themeToggle = document.getElementById("themeToggle");
-function applyTheme(){
-  const mode = localStorage.getItem("theme") || "dark";
-  if(mode==="dark"){
+
+function applyTheme() {
+  const saved = localStorage.getItem("theme") || "dark";
+  if (saved === "dark") {
     document.documentElement.classList.add("dark");
-    document.body.classList.add("bg-slate-900","text-slate-100");
+    document.documentElement.classList.remove("light");
   } else {
+    document.documentElement.classList.add("light");
     document.documentElement.classList.remove("dark");
-    document.body.classList.remove("bg-slate-900","text-slate-100");
   }
 }
 applyTheme();
+
 themeToggle.onclick = () => {
-  const current = localStorage.getItem("theme")==="dark" ? "light" : "dark";
-  localStorage.setItem("theme",current);
+  const current = localStorage.getItem("theme") || "dark";
+  const next = current === "dark" ? "light" : "dark";
+  localStorage.setItem("theme", next);
   applyTheme();
 };
 
-/* ----- HELPERS ----- */
-function toNum(v){ return v==null||v===""?null:Number(v); }
-function degCard(d){
-  if(d==null) return "—";
-  const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
-  const i=Math.floor(((d+11.25)%360)/22.5);
-  return `${d}° (${dirs[i]})`;
+
+/* ===== HELPERS ===== */
+function toNum(v) { return v === null || v === "" ? null : Number(v); }
+
+function degCard(deg) {
+  if (deg == null) return "—";
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  const idx = Math.floor(((deg + 11.25) % 360) / 22.5);
+  return `${deg}° (${dirs[idx]})`;
 }
-function windInfo(m){
+
+function windInfo(m) {
   const d = toNum(m.wdir);
   let s = toNum(m.wspd);
   let g = toNum(m.wgust ?? m.gust);
-  if(s==null) return {angle:0,text:"—"};
-  if(s>40) s=s/3.6;
-  let kt=s*1.943844;
-  let gustStr="";
-  if(g!=null){
-    if(g>40) g=g/3.6;
-    gustStr=`; порывы: ${Math.round(g)} м/с (${(g*1.943844).toFixed(1)} kt)`;
+
+  if (s == null) return { angle: 0, text: "—" };
+
+  // Convert if needed
+  if (s > 40) s = s / 3.6;
+  const sKt = s * 1.943844;
+
+  let gustStr = "";
+  if (g != null) {
+    if (g > 40) g = g / 3.6;
+    gustStr = `; порывы: ${Math.round(g)} м/с (${(g * 1.943844).toFixed(1)} kt)`;
   }
+
   return {
     angle: d ?? 0,
-    text: `${degCard(d)}\n${Math.round(s)} м/с (${kt.toFixed(1)} kt)${gustStr}`
+    text: `${degCard(d)}\n${Math.round(s)} м/с (${sKt.toFixed(1)} kt)${gustStr}`
   };
 }
 
-/* ----- API LOADERS ----- */
-async function getJSON(url){
-  const r=await fetch(url,{cache:"no-store"});
-  if(!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+
+/* ===== API HELPERS ===== */
+async function getJSON(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
 
-async function loadMETAR(icao){
-  const el=document.getElementById("metarCard");
-  el.innerHTML="Загрузка METAR...";
 
-  try{
-    const data=await getJSON(`/api/metar?ids=${icao}`);
-    const m=data[0];
+/* ===== METAR ===== */
+async function loadMETAR(icao) {
+  const el = document.getElementById("metarCard");
+  el.innerHTML = "Загрузка METAR...";
 
-    /* Status badge */
-    const cat=m.fltCat;
-    const sb=document.getElementById("statusBadge");
-    if(cat==="VFR") sb.className="badge badge-vfr", sb.textContent="VFR — Visual";
-    else if(cat==="MVFR") sb.className="badge badge-mvfr", sb.textContent="MVFR — Marginal";
-    else if(cat==="IFR") sb.className="badge badge-ifr", sb.textContent="IFR — Instrument";
-    else if(cat==="LIFR") sb.className="badge badge-lifr", sb.textContent="LIFR — Low IFR";
-    else sb.className="badge badge-default", sb.textContent="—";
+  try {
+    const data = await getJSON(`/api/metar?ids=${icao}`);
+    const m = data[0];
 
-    /* Ceiling & visibility */
-    const clouds=m.clouds||[];
-    const ceiling = clouds[0]?.base ?? null;
-    document.getElementById("ceilingText").textContent=`Потолок: ${ceiling?ceiling+" ft":"—"}`;
+    /* Status */
+    const cat = m.fltCat;
+    const sb = document.getElementById("statusBadge");
+    sb.className = "badge mt-2 " + ({
+      VFR: "badge-vfr",
+      MVFR: "badge-mvfr",
+      IFR: "badge-ifr",
+      LIFR: "badge-lifr"
+    }[cat] || "badge-default");
+    sb.textContent = cat || "—";
 
-    let vis=m.visib;
-    let visKm=vis>50?vis/1000:vis;
-    let visSM=visKm?visKm/1.609344:null;
-    document.getElementById("visText").textContent=visKm?`Видимость: ${visKm.toFixed(1)} km (${visSM.toFixed(1)} SM)`:"Видимость: —";
+    /* Ceiling + Vis */
+    const clouds = m.clouds || [];
+    const ceiling = clouds[0]?.base || null;
+    const vis = m.visib;
+    const visKm = vis ? (vis > 50 ? vis / 1000 : vis) : null;
+    const visSm = visKm ? visKm / 1.609344 : null;
+
+    document.getElementById("ceilingText").textContent = `Потолок: ${ceiling ? ceiling + " ft" : "—"}`;
+    document.getElementById("visText").textContent =
+      visKm ? `Видимость: ${visKm.toFixed(1)} km (${visSm.toFixed(1)} SM)` : "Видимость: —";
 
     /* Wind */
-    const w=windInfo(m);
+    const w = windInfo(m);
 
-    /* Clouds text */
-    const cloudsTxt = clouds.length
-      ? clouds.map(c=>`${c.cover} ${c.base||""} ft`).join(", ")
+    /* Clouds */
+    const cloudsText = clouds.length
+      ? clouds.map(c => `${c.cover} ${c.base || ""} ft`).join(", ")
       : "нет";
 
-    el.innerHTML=`
+    el.innerHTML = `
       <h2 class="text-xl font-bold mb-3 text-sky-400">METAR</h2>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div class="card-light p-4">
+
+        <div class="card-light">
           <div class="label">Температура</div>
           <div class="value">${m.temp ?? "—"} °C</div>
         </div>
 
-        <div class="card-light p-4">
+        <div class="card-light">
           <div class="label">Давление (QNH)</div>
           <div class="value">${m.altim ?? "—"} гПа</div>
         </div>
 
-        <div class="card-light p-4">
+        <div class="card-light">
           <div class="label mb-1">Ветер</div>
           <div class="flex items-center gap-3">
             <svg class="arrow" style="transform: rotate(${w.angle}deg)" viewBox="0 0 24 24">
@@ -247,32 +264,37 @@ async function loadMETAR(icao){
           </div>
         </div>
 
-        <div class="card-light p-4">
+        <div class="card-light">
           <div class="label">Видимость</div>
-          <div class="value">${visKm?visKm.toFixed(1)+" km":"—"}</div>
+          <div class="value">${visKm ? visKm.toFixed(1) + " km" : "—"}</div>
         </div>
+
       </div>
 
-      <div class="mt-3 text-sm text-slate-300">Облака: ${cloudsTxt}</div>
+      <div class="mt-3 text-sm text-slate-300">Облака: ${cloudsText}</div>
 
       <details class="mt-3">
         <summary class="cursor-pointer text-sky-400">Исходный METAR</summary>
         <pre class="mt-2 p-3 bg-slate-800 rounded">${m.rawOb}</pre>
       </details>
     `;
-  }catch(e){
-    el.innerHTML=`<div class="error-box">Ошибка METAR: ${e.message}</div>`;
+
+  } catch (e) {
+    el.innerHTML = `<div class="error-box">Ошибка METAR: ${e.message}</div>`;
   }
 }
 
-async function loadTAF(icao){
-  const el=document.getElementById("tafCard");
-  el.innerHTML="Загрузка TAF...";
-  try{
-    const d=await getJSON(`/api/taf?ids=${icao}`);
-    const t=d[0];
 
-    el.innerHTML=`
+/* ===== TAF ===== */
+async function loadTAF(icao) {
+  const el = document.getElementById("tafCard");
+  el.innerHTML = "Загрузка TAF...";
+
+  try {
+    const d = await getJSON(`/api/taf?ids=${icao}`);
+    const t = d[0];
+
+    el.innerHTML = `
       <h2 class="text-xl font-bold mb-3 text-sky-400">TAF</h2>
       <div class="text-sm text-slate-300">
         <div><b>Выпуск:</b> ${t.issueTime}</div>
@@ -284,41 +306,46 @@ async function loadTAF(icao){
         <pre class="mt-2 p-3 bg-slate-800 rounded">${t.rawTAF}</pre>
       </details>
     `;
-  }catch(e){
-    el.innerHTML=`<div class="error-box">Ошибка TAF: ${e.message}</div>`;
+
+  } catch (e) {
+    el.innerHTML = `<div class="error-box">Ошибка TAF: ${e.message}</div>`;
   }
 }
 
-async function loadAI(icao){
-  const el=document.getElementById("aiForecastCard");
-  el.innerHTML="Генерация прогноза ИИ...";
-  try{
-    const d=await getJSON(`/api/forecast?icao=${icao}`);
-    if(d.error){
-      el.innerHTML=`<div class="error-box">Ошибка прогноза ИИ: ${d.error}</div>`;
+
+/* ===== AI FORECAST ===== */
+async function loadAI(icao) {
+  const el = document.getElementById("aiForecastCard");
+  el.innerHTML = "Генерация прогноза ИИ...";
+
+  try {
+    const d = await getJSON(`/api/forecast?icao=${icao}`);
+
+    if (d.error) {
+      el.innerHTML = `<div class="error-box">Ошибка ИИ: ${d.error}</div>`;
       return;
     }
-    el.innerHTML=`
+
+    el.innerHTML = `
       <h2 class="text-xl font-bold mb-3 text-violet-400">AI Forecast</h2>
       <div class="text-sm leading-relaxed whitespace-pre-wrap">${d.forecast}</div>
     `;
-  }catch(e){
-    el.innerHTML=`<div class="error-box">Ошибка прогноза ИИ: ${e.message}</div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="error-box">Ошибка ИИ: ${e.message}</div>`;
   }
 }
 
-/* ---- Refresh ---- */
-async function refresh(){
-  const icao=document.getElementById("airportSelect").value;
+
+/* ===== Refresh ===== */
+async function refresh() {
+  const icao = document.getElementById("airportSelect").value;
   loadMETAR(icao);
   loadTAF(icao);
   loadAI(icao);
 }
 
-document.getElementById("refreshBtn").onclick=refresh;
-setInterval(refresh,60*60*1000);
-
-/* Initial load */
+document.getElementById("refreshBtn").onclick = refresh;
+setInterval(refresh, 60 * 60 * 1000);
 refresh();
 </script>
 
