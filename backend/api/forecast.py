@@ -59,6 +59,16 @@ async def forecast(icao: str = "UAAA"):
         model = genai.GenerativeModel("gemini-1.5-flash")
         resp = model.generate_content(prompt)
 
+# Fallback: получить текст в зависимости от структуры
+if hasattr(resp, "text") and resp.text:
+    ai_text = resp.text
+else:
+    try:
+        ai_text = str(resp)
+    except:
+        ai_text = "Модель не вернула текст."
+
+
 
         ai_text = None
         if hasattr(resp, "text") and resp.text:
