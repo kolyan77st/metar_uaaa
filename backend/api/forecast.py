@@ -57,7 +57,8 @@ async def forecast(icao: str = "UAAA"):
         logging.info("Sending prompt to Gemini; prompt length: %d", len(prompt))
 
         model = genai.GenerativeModel("gemini-1.5-flash")
-        resp = model.generate_content(prompt, temperature=0.2, max_output_tokens=300)
+        resp = model.generate_content(prompt)
+
 
         ai_text = None
         if hasattr(resp, "text") and resp.text:
